@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WorldSim 2.1</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0e1520;color:#edf3ff;font:14px system-ui,sans-serif}
+header{padding:15px;background:#192638;border-bottom:1px solid #334155}
+h1{margin:0;font-size:23px}
+small,.muted{color:#a5b5ca}
+main{max-width:1100px;margin:auto;padding:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.card{background:#192638;border:1px solid #334155;border-radius:12px;padding:13px;min-width:0}
+.label{font-size:11px;color:#a5b5ca}
+.value{font-size:clamp(15px,4vw,22px);font-weight:750;margin-top:5px;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
+#map{height:440px;width:100%;background:#a9cfe0;border-radius:9px;z-index:1;outline:none;overflow:hidden}.leaflet-container:focus{outline:none}.leaflet-interactive:focus{outline:none}
+h2{font-size:17px;margin:0 0 13px}
+.row{display:flex;justify-content:space-between;gap:10px;margin:14px 0}
+.row span{color:#a5b5ca}
+button{background:#30445f;color:white;border:0;border-radius:8px;padding:11px 8px;font-weight:650;font-size:13px}
+button:active{opacity:.75}
+.primary{background:#2878ee}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}
+#message{line-height:1.5;color:#a5b5ca}
+#events{line-height:1.8;font-size:12px;overflow-wrap:anywhere}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#192638;color:#edf3ff}
+@media(max-width:680px){.layout{grid-template-columns:1fr}#map{height:52vh;min-height:300px;max-height:470px}.card{padding:11px}}
+</style>
+</head>
+<body>
+<header>
+<h1>🌍 WorldSim <small>2.1</small></h1>
+<small>Country simulator · Real world geography</small>
+</header>
+<main>
+<div class="stats">
+ <div class="card"><div class="label">SIMULATION DATE</div><div class="value" id="date">2026 · Jan</div></div>
+ <div class="card"><div class="label">TREASURY</div><div class="value" id="treasury">$500B</div></div>
+ <div class="card"><div class="label">COUNTRIES</div><div class="value" id="count">Loading...</div></div>
+</div>
+<div class="layout">
+<section class="card">
+<h2>🗺️ World map</h2>
+<div id="map"></div>
+<p class="muted">Tap any country to select it. Pinch to zoom; drag to move.</p>
+<div class="row">
+<button id="pause">⏸ Pause</button>
+<button id="next" class="primary">⏩ Next month</button>
+</div>
+</section>
+<section class="card">
+<h2 id="country">Select a country</h2>
+<div class="row"><span>Population</span><b id="pop">—</b></div>
+<div class="row"><span>GDP</span><b id="gdp">—</b></div>
+<div class="row"><span>Government</span><b id="gov">—</b></div>
+<div class="row"><span>Influence</span><b id="influence">—</b></div>
+<div class="row"><span>Research</span><b id="research">—</b></div>
+<div class="label">ECONOMIC DEVELOPMENT</div>
+<div style="height:7px;background:#334155;border-radius:9px;margin-top:8px;overflow:hidden">
+<div id="bar" style="height:100%;width:40%;background:#4ade80"></div>
+</div>
+<div class="buttons">
+<button id="invest">📈 Invest $25B</button>
+<button id="study">🔬 Research $20B</button>
+<button id="diplomacy">🤝 Diplomacy</button>
+<button id="save">💾 Save game</button>
+<button id="load">📂 Load game</button>
+<button id="reset">↻ New game</button>
+</div>
+<p id="message">Select a country to manage it.</p>
+</section>
+</div>
+<section class="card" style="margin-top:12px">
+<h2>📜 World events</h2>
+<div id="events">Welcome to WorldSim 2.0.</div>
+</section>
+<p class="muted">Geographic boundaries: Natural Earth dataset. Statistics are simplified game estimates, not live national data.</p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const palette=["#3986d5","#e0a04b","#50aa7c","#a27bd0",
+"#d75e75","#45aaa9","#b7a34d","#6b82df","#dc7b47"];
+let map,layer,all=[],selected=null,month=0,paused=false;
+let treasury=500,states={},timer;
+
+function money(n){return "$"+Math.round(n).toLocaleString()+"B"}
+function say(s){
+ $("message").textContent=s;
+ $("events").innerHTML=s+"<br>"+$("events").innerHTML;
+ $("events").innerHTML=$("events").innerHTML.split("<br>").slice(0,12).join("<br>");
+}
+function countryName(f){
+ let p=f.properties||{};
+ return p.name||p.ADMIN||p.NAME||p.name_long||"Unknown";
+}
+function getState(name){
+ if(!states[name]){
+  let seed=0;
+  for(let i=0;i<name.length;i++)seed=(seed*31+name.charCodeAt(i))>>>0;
+  states[name]={
+   owner:name,
+   pop:Math.round(5+(seed%140)),
+   gdp:Math.round(20+(seed%1500)),
+   influence:25+(seed%65),
+   research:0,
+   economy:25+(seed%65),
+   government:["Republic","Democracy","Federation","Monarchy"][seed%4]
+  };
+ }
+ return states[name];
+}
+function styleFeature(f){
+ let n=countryName(f),s=getState(n);
+ let idx=all.indexOf(n);
+ let color=palette[(idx<0?0:idx)%palette.length];
+ return {
+  color:n===selected?"#ffffff":"#526477",
+  weight:n===selected?3:0.7,
+  fillColor:palette[hash(s.owner)%palette.length],
+  fillOpacity:n===selected?0.95:0.78
+ };
+}
+function hash(s){
+ let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+ return h;
+}
+function selectCountry(name){
+ selected=name;render();if(layer)layer.setStyle(styleFeature);
+}
+function render(){
+ let s=selected?getState(selected):null;
+ $("date").textContent=(2026+Math.floor(month/12))+" · "+
+ ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][month%12];
+ $("treasury").textContent=money(treasury);
+ $("count").textContent=all.length||"—";
+ if(!s){
+  $("country").textContent="Select a country";
+  ["pop","gdp","gov","influence","research"].forEach(id=>$(id).textContent="—");
+  return;
+ }
+ $("country").textContent=(s.owner===selected?"🏳️ ":"🌐 ")+selected;
+ $("pop").textContent=s.pop+"M";
+ $("gdp").textContent=money(s.gdp);
+ $("gov").textContent=s.government;
+ $("influence").textContent=Math.round(s.influence)+"/100";
+ $("research").textContent=s.research+" points";
+ $("bar").style.width=Math.min(100,s.economy)+"%";
+}
+function initMap(data){
+ map=L.map("map",{worldCopyJump:true,minZoom:1,maxZoom:8})
+  .setView([20,0],2);
+ layer=L.geoJSON(data,{
+  style:styleFeature,
+  onEachFeature:(f,l)=>{
+   const name=countryName(f);
+   l.bindTooltip(name,{sticky:true});
+   l.on("click",()=>{
+    selectCountry(name);
+    l.bindPopup("<b>"+escapeHTML(name)+"</b><br>GDP: "+
+      money(getState(name).gdp)+"<br>Tap the country panel to manage it.")
+      .openPopup();
+   });
+  }
+ }).addTo(map);
+ all=[...new Set(data.features.map(countryName))].sort();
+ $("count").textContent=all.length;
+ render();
+ setTimeout(()=>map.invalidateSize(),150);
+}
+function escapeHTML(s){
+ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function invest(){
+ if(!selected)return say("Select a country first.");
+ if(treasury<25)return say("Not enough treasury.");
+ treasury-=25;let s=getState(selected);
+ s.gdp+=25;s.economy=Math.min(100,s.economy+5);
+ say("Invested in "+selected+"'s economy.");render();
+}
+function study(){
+ if(!selected)return say("Select a country first.");
+ if(treasury<20)return say("Not enough treasury.");
+ treasury-=20;let s=getState(selected);
+ s.research++;s.influence=Math.min(100,s.influence+2);
+ say(selected+" completed a research project.");render();
+}
+function diplomacy(){
+ if(!selected)return say("Select a country first.");
+ if(treasury<10)return say("Not enough treasury.");
+ treasury-=10;let s=getState(selected);
+ s.influence=Math.min(100,s.influence+8);
+ say("Diplomatic influence increased for "+selected+".");render();
+}
+function tick(){
+ if(paused)return;
+ month++;
+ Object.values(states).forEach(s=>{
+  s.gdp*=1.002+s.economy/10000;
+ });
+ treasury+=Math.max(1,getState(selected||all[0]).gdp*.004);
+ say("Month advanced. Your economy and world simulation developed.");
+ render();
+}
+function save(){
+ localStorage.setItem("worldsim2",JSON.stringify({states,selected,month,treasury}));
+ say("Game saved on this device.");
+}
+function load(){
+ try{
+  const d=JSON.parse(localStorage.getItem("worldsim2"));
+  if(!d)throw Error();
+  states=d.states||{};selected=d.selected;month=d.month||0;treasury=d.treasury||500;
+  render();if(layer)layer.setStyle(styleFeature);
+  say("Saved game loaded.");
+ }catch(e){say("No valid save found yet.");}
+}
+function reset(){
+ if(!confirm("Start a new simulation?"))return;
+ states={};selected=null;month=0;treasury=500;paused=false;
+ render();if(layer)layer.setStyle(styleFeature);
+ say("New simulation started.");
+}
+$("invest").onclick=invest;$("study").onclick=study;
+$("diplomacy").onclick=diplomacy;$("save").onclick=save;
+$("load").onclick=load;$("reset").onclick=reset;
+$("next").onclick=tick;
+$("pause").onclick=()=>{
+ paused=!paused;
+ $("pause").textContent=paused?"▶ Resume":"⏸ Pause";
+};
+fetch("./countries.geojson")
+ .then(r=>{if(!r.ok)throw Error("Country map download missing");return r.json()})
+ .then(initMap)
+ .catch(e=>{
+  $("count").textContent="Error";
+  $("events").textContent="Could not load countries.geojson. Check that the file exists and the server is running. "+e.message;
+ });
+</script>
+</body>
+</html>
