@@ -5,30 +5,50 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WorldSim 2.1</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#0e1520;color:#edf3ff;font:14px system-ui,sans-serif}
-header{padding:15px;background:#192638;border-bottom:1px solid #334155}
-h1{margin:0;font-size:23px}
-small,.muted{color:#a5b5ca}
-main{max-width:1100px;margin:auto;padding:12px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.card{background:#192638;border:1px solid #334155;border-radius:12px;padding:13px;min-width:0}
-.label{font-size:11px;color:#a5b5ca}
-.value{font-size:clamp(15px,4vw,22px);font-weight:750;margin-top:5px;overflow-wrap:anywhere}
-.layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
-#map{height:440px;width:100%;background:#a9cfe0;border-radius:9px;z-index:1;outline:none;overflow:hidden}.leaflet-container:focus{outline:none}.leaflet-interactive:focus{outline:none}
+:root{color-scheme:dark}
+body{margin:0;background:#080f1b;color:#e8f0ff;font:14px system-ui,-apple-system,sans-serif}
+header{padding:15px 18px;background:linear-gradient(120deg,#101e32,#142b42);border-bottom:1px solid #263b54}
+h1{margin:0;font-size:23px;letter-spacing:-.5px}
+small,.muted{color:#91a7c2}
+main{max-width:1500px;margin:auto;padding:14px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.card{background:linear-gradient(145deg,#111f31,#0e1928);border:1px solid #263b53;border-radius:14px;padding:14px;min-width:0;box-shadow:0 5px 20px #0002}
+.label{font-size:11px;letter-spacing:1px;color:#91a7c2}
+.value{font-size:clamp(15px,4vw,23px);font-weight:800;margin-top:6px;overflow-wrap:anywhere;color:#f2f7ff}
+.layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(270px,1fr);gap:12px}
+#map{height:min(68vh,720px);min-height:390px;width:100%;background:#071522;border-radius:10px;z-index:1;overflow:hidden;border:1px solid #29445b}
+.leaflet-container{background:#071522}
+.leaflet-container:focus,.leaflet-interactive:focus{outline:none}
 h2{font-size:17px;margin:0 0 13px}
-.row{display:flex;justify-content:space-between;gap:10px;margin:14px 0}
-.row span{color:#a5b5ca}
-button{background:#30445f;color:white;border:0;border-radius:8px;padding:11px 8px;font-weight:650;font-size:13px}
-button:active{opacity:.75}
-.primary{background:#2878ee}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:15px 0}
+.row span{color:#91a7c2}
+.row b{text-align:right}
+button{background:#253b54;color:#edf5ff;border:1px solid #344d68;border-radius:9px;padding:12px 9px;font-weight:700;font-size:13px;cursor:pointer;transition:background .15s,transform .15s}
+button:active{transform:scale(.98);opacity:.85}
+.primary{background:#1769e8;border-color:#3786ff}
 .buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}
-#message{line-height:1.5;color:#a5b5ca}
-#events{line-height:1.8;font-size:12px;overflow-wrap:anywhere}
-.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#192638;color:#edf3ff}
-@media(max-width:680px){.layout{grid-template-columns:1fr}#map{height:52vh;min-height:300px;max-height:470px}.card{padding:11px}}
+#message{line-height:1.6;color:#a9bed6;background:#0a1726;padding:10px;border-radius:8px}
+#events{line-height:1.8;font-size:12px;overflow-wrap:anywhere;color:#b7c9df}
+.leaflet-tooltip{background:#10233a;color:#f1f7ff;border:1px solid #42617e;box-shadow:0 3px 12px #0005}
+.leaflet-tooltip:before{border-top-color:#42617e}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#10233a;color:#edf3ff}
+.leaflet-popup-content{line-height:1.7}
+.leaflet-control-zoom a{background:#14263a!important;color:#fff!important;border-color:#334b65!important}
+@media(max-width:680px){
+ main{padding:9px}
+ header{padding:13px}
+ h1{font-size:21px}
+ .layout{grid-template-columns:1fr}
+ #map{height:55vh;min-height:320px;max-height:520px}
+ .card{padding:11px}
+ .stats{gap:6px}
+ .stats .card{padding:10px 8px}
+ .label{font-size:9px;letter-spacing:.5px}
+ .value{font-size:clamp(14px,4vw,19px)}
+}
 </style>
 </head>
 <body>
@@ -67,6 +87,8 @@ button:active{opacity:.75}
 <button id="invest">📈 Invest $25B</button>
 <button id="study">🔬 Research $20B</button>
 <button id="diplomacy">🤝 Diplomacy</button>
+<button id="setNation">🏳️ Set Nation</button>
+<button id="expand" class="primary">🗺️ Expand Territory ($50B)</button>
 <button id="save">💾 Save game</button>
 <button id="load">📂 Load game</button>
 <button id="reset">↻ New game</button>
@@ -86,7 +108,7 @@ const $=id=>document.getElementById(id);
 const palette=["#3986d5","#e0a04b","#50aa7c","#a27bd0",
 "#d75e75","#45aaa9","#b7a34d","#6b82df","#dc7b47"];
 let map,layer,all=[],selected=null,month=0,paused=false;
-let treasury=500,states={},timer;
+let treasury=500,states={},timer,playerNation=null;
 
 function money(n){return "$"+Math.round(n).toLocaleString()+"B"}
 function say(s){
@@ -119,10 +141,10 @@ function styleFeature(f){
  let idx=all.indexOf(n);
  let color=palette[(idx<0?0:idx)%palette.length];
  return {
-  color:n===selected?"#ffffff":"#526477",
-  weight:n===selected?3:0.7,
+  color:n===selected?"#ffffff":"#263d55",
+  weight:n===selected?2.5:0.65,
   fillColor:palette[hash(s.owner)%palette.length],
-  fillOpacity:n===selected?0.95:0.78
+  fillOpacity:n===selected?0.98:0.9
  };
 }
 function hash(s){
@@ -143,7 +165,7 @@ function render(){
   ["pop","gdp","gov","influence","research"].forEach(id=>$(id).textContent="—");
   return;
  }
- $("country").textContent=(s.owner===selected?"🏳️ ":"🌐 ")+selected;
+ $("country").textContent=(s.owner===playerNation?"🏳️ ":"🌐 ")+selected;
  $("pop").textContent=s.pop+"M";
  $("gdp").textContent=money(s.gdp);
  $("gov").textContent=s.government;
@@ -152,9 +174,9 @@ function render(){
  $("bar").style.width=Math.min(100,s.economy)+"%";
 }
 function initMap(data){
- map=L.map("map",{worldCopyJump:true,minZoom:1,maxZoom:8})
+ map=L.map("map",{worldCopyJump:true,minZoom:1,maxZoom:8,preferCanvas:true})
   .setView([20,0],2);
- layer=L.geoJSON(data,{
+ layer=L.geoJSON(data,{renderer:L.canvas({padding:0.5}),
   style:styleFeature,
   onEachFeature:(f,l)=>{
    const name=countryName(f);
@@ -182,6 +204,23 @@ function invest(){
  s.gdp+=25;s.economy=Math.min(100,s.economy+5);
  say("Invested in "+selected+"'s economy.");render();
 }
+function setNation(){
+ if(!selected)return say("Select your starting country first.");
+ playerNation=selected;
+ getState(selected).owner=selected;
+ say("Your nation is now "+selected+". Select another country to expand peacefully.");
+ render();if(layer)layer.setStyle(styleFeature);
+}
+function expand(){
+ if(!playerNation)return say("First select your country and press Set Nation.");
+ if(!selected)return say("Select a country to claim.");
+ if(selected===playerNation)return say("That is already your home nation.");
+ if(treasury<50)return say("You need $50B to expand.");
+ treasury-=50;
+ getState(selected).owner=playerNation;
+ say(playerNation+" peacefully expanded into "+selected+".");
+ render();if(layer)layer.setStyle(styleFeature);
+}
 function study(){
  if(!selected)return say("Select a country first.");
  if(treasury<20)return say("Not enough treasury.");
@@ -207,25 +246,26 @@ function tick(){
  render();
 }
 function save(){
- localStorage.setItem("worldsim2",JSON.stringify({states,selected,month,treasury}));
+ localStorage.setItem("worldsim2",JSON.stringify({states,selected,month,treasury,playerNation}));
  say("Game saved on this device.");
 }
 function load(){
  try{
   const d=JSON.parse(localStorage.getItem("worldsim2"));
   if(!d)throw Error();
-  states=d.states||{};selected=d.selected;month=d.month||0;treasury=d.treasury||500;
+  states=d.states||{};selected=d.selected;month=d.month||0;treasury=d.treasury??500;playerNation=d.playerNation||null;
   render();if(layer)layer.setStyle(styleFeature);
   say("Saved game loaded.");
  }catch(e){say("No valid save found yet.");}
 }
 function reset(){
  if(!confirm("Start a new simulation?"))return;
- states={};selected=null;month=0;treasury=500;paused=false;
+ states={};selected=null;month=0;treasury=500;paused=false;playerNation=null;
  render();if(layer)layer.setStyle(styleFeature);
  say("New simulation started.");
 }
 $("invest").onclick=invest;$("study").onclick=study;
+$("setNation").onclick=setNation;$("expand").onclick=expand;
 $("diplomacy").onclick=diplomacy;$("save").onclick=save;
 $("load").onclick=load;$("reset").onclick=reset;
 $("next").onclick=tick;
